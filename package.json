@@ -1,0 +1,33 @@
+{
+  "name": "frame-worker",
+  "version": "0.0.0",
+  "description": "Run Worker Script inside an Iframe",
+  "main": "frame-worker.js",
+  "files": [
+    "frame-worker.js"
+  ],
+  "scripts": {
+    "serve": "npx --offline srvd --debug",
+    "test": "echo 'no automated tests'"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DanielJDufour/frame-worker.git"
+  },
+  "keywords": [
+    "frame",
+    "iframe",
+    "web",
+    "worker"
+  ],
+  "author": "Daniel J. Dufour",
+  "license": "CC0-1.0",
+  "bugs": {
+    "url": "https://github.com/DanielJDufour/frame-worker/issues"
+  },
+  "homepage": "https://github.com/DanielJDufour/frame-worker#readme",
+  "devDependencies": {
+    "flug": "^2.3.1",
+    "srvd": "^0.4.0"
+  }
+}

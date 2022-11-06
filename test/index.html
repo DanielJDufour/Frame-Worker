@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script src="/node_modules/flug/index.js"></script>
+    <script src="/frame-worker.js"></script>
+    <script>
+      process = {
+        env: {
+          TEST_NAME: "*"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <script>
+      const TERMINATE = true;
+
+      test("basic + context", ({ eq }) => {
+        return new Promise(resolve => {
+          const multiplier = 10;
+          const worker = new FrameWorker("./square.worker.js", undefined, { context: { _multiplier: multiplier }, debug: true });
+          worker.onmessage = function(e) {
+            eq(e.data, 5 * 5 * multiplier);
+            if (TERMINATE) worker.terminate();
+            resolve("done");
+          };
+          worker.postMessage(5);        
+        });
+      });
+
+      test("blob url", async ({ eq }) => {
+        const workerScript = await fetch("./square.worker.js").then(res => res.text());
+        const blob = new Blob([workerScript], { type: "text/javascript" });
+        const url = URL.createObjectURL(blob);
+        return new Promise(resolve => {
+          const worker = new FrameWorker(url);
+          worker.onmessage = function(e) {
+            eq(e.data, 9);
+            if (TERMINATE) worker.terminate();
+            resolve("done");
+          };
+          worker.postMessage(3);        
+        });
+      });
+
+      test("data url", async ({ eq }) => {
+        const text = await fetch("./square.worker.js").then(res => res.text());
+        const url = "data:application/javascript," + text;
+        return new Promise(resolve => {
+          const worker = new FrameWorker(url, undefined, { debug: true, id: "data url" });
+          worker.onmessage = function(e) {
+            eq(e.data, 9);
+            if (TERMINATE) worker.terminate();
+            resolve("done");
+          };
+          worker.postMessage(3);        
+        });
+      });      
+
+      test("base-64 encoded data url", async ({ eq }) => {
+        const text = await fetch("./square.worker.js").then(res => res.text());
+        const url = "data:application/javascript;base64," + btoa(text);
+        return new Promise(resolve => {
+          const worker = new FrameWorker(url, undefined, { debug: true, id: "base-64 encoded data url" });
+          worker.onmessage = function(e) {
+            eq(e.data, 9);
+            if (TERMINATE) worker.terminate();
+            resolve("done");
+          };
+          worker.postMessage(3);        
+        });
+      });
+
+      test("raw cjs", async ({ eq }) => {
+        const cjsCode = `
+        module.exports = function() {
+          return 1234;
+        }`;
+        return new Promise(resolve => {
+          const worker = new FrameWorker(cjsCode, undefined, { cjs: true, debug: true, id: "raw cjs", raw: true });
+          worker.onmessage = function(e) {
+            eq(e.data, 1234);
+            if (TERMINATE) worker.terminate();
+            resolve("done");
+          };
+          worker.postMessage(3);        
+        });
+      });
+
+
+      test("cjs", async ({ eq }) => {
+        const cjsCode = `
+        module.exports = function() {
+          return 1234;
+        }`;
+        const url = "data:application/javascript;base64," + btoa(cjsCode);
+        return new Promise(resolve => {
+          const worker = new FrameWorker(url, undefined, { cjs: true, debug: true, id: "cjs" });
+          worker.onmessage = function(e) {
+            eq(e.data, 1234);
+            if (TERMINATE) worker.terminate();
+            resolve("done");
+          };
+          worker.postMessage(3);        
+        });
+      });
+
+      test("cjs default", async ({ eq }) => {
+        const cjsCode = `
+        module.exports.default = function() {
+          return 1234;
+        }`;
+        const url = "data:application/javascript;base64," + btoa(cjsCode);
+        return new Promise(resolve => {
+          const worker = new FrameWorker(url, undefined, { cjs: true, debug: true, id: "cjs default" });
+          worker.onmessage = function(e) {
+            eq(e.data, 1234);
+            if (TERMINATE) worker.terminate();
+            resolve("done");
+          };
+          worker.postMessage(3);        
+        });
+      });
+    </script>
+  </body>
+</html>
