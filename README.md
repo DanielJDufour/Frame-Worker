@@ -30,6 +30,11 @@ new FrameWorker("blob:http://localhost:8080/bf331630-1275-4b3d-9b65-22512egdb592
 
 // initialize from data url
 new FrameWorker("data:application/javascript;base64,Cm1vZHVsZS5leHBvcnRzLmRlZmF1bHQgPSBmdW5jdGlvbigpIHsKICByZXR1cm4gMTIzNDsKfQ==");
+
+// listen to messages
+worker.addEventListener("message", function (event) {
+  console.log("received": event.data);
+});
 ```
 
 ## advanced usage

@@ -121,6 +121,21 @@
           worker.postMessage(3);        
         });
       });
+
+      test("addEventListener", ({ eq }) => {
+        return new Promise(resolve => {
+          const worker = new FrameWorker("./square.worker.js", undefined, { debug: true });
+          const handler = e => {
+            eq(e.data, 7 * 7);
+            if (TERMINATE) worker.terminate();
+            resolve("done");
+          };
+          worker.addEventListener("message", handler);
+          worker.removeEventListener("message", handler);
+          worker.addEventListener("message", handler);
+          worker.postMessage(7);
+        });
+      });
     </script>
   </body>
 </html>

@@ -69,6 +69,11 @@ function FrameWorker(workerScript, workerOptions, extraOptions) {
   var ready = false;
   var queue = [];
   var worker = {};
+  var handlers = {
+    message: [],
+    error: [],
+    messagerror: []
+  };
 
   function createFrameWorker() {
     iframe = document.createElement("iframe");
@@ -98,6 +103,10 @@ function FrameWorker(workerScript, workerOptions, extraOptions) {
       if (worker.onmessage) {
         var evt = new MessageEvent(typeof data, { data: data });
         worker.onmessage(evt, transfer);
+      }
+      for (let i = 0; i < handlers.message.length; i++) {
+        var evt = new MessageEvent(typeof data, { data: data });
+        handlers.message[i](evt, transfer);
       }
     };
 
@@ -156,6 +165,18 @@ function FrameWorker(workerScript, workerOptions, extraOptions) {
     };
 
     iframe.contentDocument.body.appendChild(script);
+
+    worker.addEventListener = function (type, listener) {
+      if (handlers[type].indexOf(listener) === -1) {
+        handlers[type].push(listener);
+      }
+    }
+
+    worker.removeEventListener = function (type, listener) {
+      handlers[type] = handlers[type].filter(function (it) {
+        return it !== listener;
+      });
+    }
 
     worker.postMessage = function (data, transfer) {
       const evt = new MessageEvent(typeof data, { data });
