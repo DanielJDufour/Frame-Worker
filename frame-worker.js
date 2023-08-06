@@ -2,11 +2,29 @@
   IE doesn't support type="module", so we essentially ignore when workerOptions.type = "module"
   and try to convert to commonjs anyway
 */
+
+// function to fetch code for JavaScript files and
+// works on older browsers that don't support fetch
+// function fetchResponseText(url, callback) {
+//   const xhr = new XMLHttpRequest();
+//   xhr.overrideMimeType("text/plain");
+//   xhr.open("GET", url, true);
+//   xhr.onreadystatechange = function () {
+//     if (xhr.readyState == 4) {
+//       callback(xhr.responseText);
+//     }
+//   };
+//   xhr.send(null);
+// }
+
 function FrameWorker(workerScript, workerOptions, extraOptions) {
   var context = typeof extraOptions === "object" && typeof extraOptions.context === "object" && extraOptions.context;
   var cjs = typeof extraOptions === "object" && typeof extraOptions.cjs === "boolean" && extraOptions.cjs;
   var debug = typeof extraOptions === "object" && extraOptions.debug === true;
   var id = typeof extraOptions === "object" && typeof extraOptions.id === "string" && extraOptions.id;
+  var onblob = typeof extraOptions === "object" && typeof extraOptions.onblob === "string" && extraOptions.onblob;
+  var onscripterror = typeof extraOptions === "object" && typeof extraOptions.onscripterror === "string" && extraOptions.onscripterror;
+  var onterminate = typeof extraOptions === "object" && typeof extraOptions.onterminate === "string" && extraOptions.onterminate;
   var raw = typeof extraOptions === "object" && typeof extraOptions.raw === "boolean" && extraOptions.raw;
   var revoke = typeof extraOptions === "object" && typeof extraOptions.revoke === "boolean" && extraOptions.revoke;
 
@@ -19,20 +37,6 @@ function FrameWorker(workerScript, workerOptions, extraOptions) {
     return typeof it === "object" && typeof it.then === "function";
   }
 
-  // function to fetch code for JavaScript files and
-  // works on older browsers that don't support fetch
-  function fetchResponseText(url, callback) {
-    const xhr = new XMLHttpRequest();
-    xhr.overrideMimeType("text/plain");
-    xhr.open("GET", url, true);
-    xhr.onreadystatechange = function () {
-      if (xhr.readyState == 4) {
-        callback(xhr.responseText);
-      }
-    };
-    xhr.send(null);
-  }
-
   if (typeof workerOptions === "object" && workerOptions.type === "module") {
     throw new Error('[frame-worker] type="module" is not supported');
   }
@@ -42,6 +46,7 @@ function FrameWorker(workerScript, workerOptions, extraOptions) {
   if (raw) {
     try {
       var blob = new Blob([workerScript], { type: "text/javascript" });
+      if (onblob) onblob(blob);
       workerScript = blobURL = URL.createObjectURL(blob);
     } catch (error) {
       workerScript = "data:application/javascript;base64," + btoa(workerScript);
@@ -51,14 +56,15 @@ function FrameWorker(workerScript, workerOptions, extraOptions) {
       if (workerScript.startsWith("data:application/javascript;base64,")) {
         const decodedWorkerScript = atob(workerScript.replace("data:application/javascript;base64,", ""));
         var blob = new Blob([decodedWorkerScript], { type: "text/javascript" });
+        if (onblob) onblob(blob);
         workerScript = blobURL = URL.createObjectURL(blob);
         if (debug) console.log(prefix + "converted data url to blob url");
       } else if (workerScript.startsWith("data:application/javascript,")) {
         const content = workerScript.replace("data:application/javascript,", "");
-        blob = new Blob([content], { type: "text/javascript" });
+        var blob = new Blob([content], { type: "text/javascript" });
+        if (onblob) onblob(blob);
         workerScript = blobURL = URL.createObjectURL(blob);
       }
-
     } catch (error) {
       return "data:application/javascript;base64," + btoa(text);
     }
@@ -69,6 +75,8 @@ function FrameWorker(workerScript, workerOptions, extraOptions) {
   var ready = false;
   var queue = [];
   var worker = {};
+
+  // functions to respond to events dispatched to the pseudo web worker
   var handlers = {
     message: [],
     error: [],
@@ -87,6 +95,22 @@ function FrameWorker(workerScript, workerOptions, extraOptions) {
 
     var _self = (iframe.contentWindow.self = iframe.contentWindow);
 
+    // hijack event listeners for iframe content window
+    const self_eventListeners = {};
+    _self.addEventListener = function(type, listener) {
+      if (!self_eventListeners[type]) self_eventListeners[type] = [];
+      self_eventListeners[type].push(listener);
+    }
+    _self.removeEventListener = function(type, listener) {
+      if (!self_eventListeners[type]) return;
+      self_eventListeners[type] = self_eventListeners[type].filter(function (it) { return it !== listener; });
+      if (self_eventListeners[type].length === 0) delete self_eventListeners[type];
+    }
+
+    function getMessageHandlers () {
+      return [_self.onmessage].concat(self_eventListeners.message).filter(Boolean);
+    }
+
     // add context
     if (context) {
       for (let key in context) {
@@ -99,6 +123,9 @@ function FrameWorker(workerScript, workerOptions, extraOptions) {
     // fake module.exports inside of iframe
     var _module = (iframe.contentWindow.module = { exports: {} });
 
+    // this is simulating postMessage INSIDE of a web worker,
+    // such that this message propagates up to worker.onmessage
+    // and added worker event handlers
     _self.postMessage = function (data, transfer) {
       if (worker.onmessage) {
         var evt = new MessageEvent(typeof data, { data: data });
@@ -113,14 +140,20 @@ function FrameWorker(workerScript, workerOptions, extraOptions) {
     var script = document.createElement("script");
     if (debug) console.log(prefix + "workerScript:", workerScript);
 
-    iframe.contentWindow.onerror = (error) => {
+    iframe.contentWindow.onerror = function (error) {
       if (worker.onerror) {
         worker.onerror(error);
       }
     };
 
-    script.onerror = (e) => console.error("script errror:", e);
-    script.addEventListener("error", (e) => console.error("script errror:", e));
+    script.onerror = function (e) {
+      console.error("script errror:", e);
+      if (onscripterror) onscripterror(e);
+    };
+    script.addEventListener("error", function (e) {
+      console.error("script errror:", e);
+      if (onscripterror) onscripterror(e);
+    });
 
     // fetchResponseText(workerScript, function (text) {
     //   const blob = new Blob([text], { type: "text/javascript" });
@@ -136,13 +169,20 @@ function FrameWorker(workerScript, workerOptions, extraOptions) {
         var entry = queue[q];
         var queuedMessage = entry[0];
         var queuedTransfer = entry[1];
-        if (_self.onmessage) {
-          try {
-            _self.onmessage(queuedMessage, queuedTransfer);
-          } catch (error) {
-            console.error(error);
-            if (worker.onerror) {
-              worker.onerror(error);
+
+        // collecting all handlers including from directly setting onmessage and calling addEventListeners
+        var messageHandlers = getMessageHandlers();
+
+        if (messageHandlers.length > 0) {
+          for (let h = 0; h < messageHandlers.length; h++) {
+            try {
+              const handler = messageHandlers[h];
+              handler(queuedMessage, queuedTransfer);
+            } catch (error) {
+              console.error(error);
+              if (worker.onerror) {
+                worker.onerror(error);
+              }
             }
           }
         } else if (cjs && (typeof _module.exports === "function" || typeof _module.exports.default === "function")) {
@@ -181,13 +221,18 @@ function FrameWorker(workerScript, workerOptions, extraOptions) {
     worker.postMessage = function (data, transfer) {
       const evt = new MessageEvent(typeof data, { data });
       if (ready) {
-        if (_self.onmessage) {
-          try {
-            _self.onmessage(evt, transfer);
-          } catch (error) {
-            console.error(error);
-            if (worker.onerror) {
-              worker.onerror(error);
+        var messageHandlers = getMessageHandlers();
+
+        if (messageHandlers.length > 0) {
+          for (let h = 0; h < messageHandlers.length; h++) {
+            try {
+              const handler = messageHandlers[h];
+              handler(evt, transfer);
+            } catch (error) {
+              console.error(error);
+              if (worker.onerror) {
+                worker.onerror(error);
+              }
             }
           }
         } else if (cjs && (typeof _module.exports === "function" || typeof _module.exports.default === "function")) {
@@ -216,6 +261,7 @@ function FrameWorker(workerScript, workerOptions, extraOptions) {
           console.log(error);
         }
       }
+      if (onterminate) onterminate();
     };
   }
 

@@ -1,5 +1,5 @@
 # Frame-Worker
-Run Code inside an IFrame like a Web Worker
+> Run Web Worker Script with an IFrame
 
 ## features
 - default export detection
@@ -55,9 +55,10 @@ You can pass in a CommonJS module and have it automatically interpreted as a Web
 If there is no self.onmessage defined in the input script, FrameWorker will automatically look for and call `module.exports` or `module.exports.default` function.
 ```js
 const code = `
-module.exports = function() {
-  return 1234;
-}`;
+  module.exports = function() {
+    return 1234;
+  }
+`;
 new FrameWorker(code, undefined, {
   cjs: true, // code is a basic CommonJS file
   raw: true // code is not encoded in a Data URL or Blob URL
